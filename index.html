@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <!-- Firebase SDK（互換版）-->
+  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore-compat.js"></script>
+  <!-- QRコード生成ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>AIふせんボード</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #f5efe0;          /* 教室の壁っぽい明るい色 */
+      --card: #ffffff;
+      --ink: #222;
+      --accent: #8b5a2b;      /* 茶色：黒板の木枠と合わせる */
+      --accent-soft: #e0e7ff;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top, #fff7e6 0, #f5efe0 45%, #ede4d3 100%);
+      color: var(--ink);
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+      background: rgba(245, 239, 224, 0.9);
+      border-bottom: 1px solid rgba(148, 116, 70, 0.4);
+      padding: 8px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* QRアイコンボタン */
+    .qr-button {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid #cbd5f5;
+      background: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      cursor: pointer;
+    }
+    .qr-button:hover {
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+    .qr-icon {
+      width: 20px;
+      height: 20px;
+      /* シンプルなQR風アイコン（SVGデータ） */
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' fill='%23ffffff'/><rect x='3' y='3' width='14' height='14' fill='none' stroke='%23000000' stroke-width='3'/><rect x='23' y='3' width='14' height='14' fill='none' stroke='%23000000' stroke-width='3'/><rect x='3' y='23' width='14' height='14' fill='none' stroke='%23000000' stroke-width='3'/><rect x='7' y='7' width='6' height='6' fill='%23000000'/><rect x='27' y='7' width='6' height='6' fill='%23000000'/><rect x='7' y='27' width='6' height='6' fill='%23000000'/><rect x='22' y='22' width='4' height='4' fill='%23000000'/><rect x='30' y='22' width='3' height='7' fill='%23000000'/><rect x='22' y='30' width='7' height='3' fill='%23000000'/></svg>");
+      background-size: cover;
+      background-position: center;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+      flex: 1;
+    }
+    .toolbar-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    label {
+      font-size: 0.8rem;
+      color: #475569;
+      white-space: nowrap;
+    }
+    input[type="text"],
+    input[type="password"] {
+      font: inherit;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid #cbd5f5;
+      min-width: 160px;
+      background: #fff;
+      outline: none;
+    }
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+    button {
+      font: inherit;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--accent);  /* 茶色ボタン */
+      color: #fff;
+    }
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid #cbd5f5;
+      color: #475569;
+    }
+    .btn-ghost-danger {
+      background: transparent;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      gap: 16px;
+      padding: 12px 16px 24px;
+    }
+    @media (max-width: 800px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(99, 79, 48, 0.18);
+      padding: 14px 16px 16px;
+      border: 1px solid rgba(180, 140, 90, 0.4);
+    }
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .panel p.hint {
+      margin: 0 0 10px;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .field-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .field-row > * {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 90px;
+      resize: vertical;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid #cbd5f5;
+      font: inherit;
+      outline: none;
+    }
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+
+    .status {
+      font-size: 0.8rem;
+      color: #64748b;
+      min-height: 1.2em;
+    }
+    .status.error { color: var(--danger); }
+
+    /* ===== 右側パネルを黒板に ===== */
+    .panel.board-panel {
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255,255,255,0.14) 0, transparent 40%),
+        radial-gradient(circle at 90% 100%, rgba(255,255,255,0.06) 0, transparent 45%),
+        linear-gradient(135deg, #253c30 0%, #07130b 70%, #020305 100%);
+      border-color: #3f4f3a;
+      color: #f9fbe7;
+      box-shadow:
+        0 0 0 6px #8b5a2b,
+        0 0 0 10px #d1a66b,
+        0 18px 30px rgba(0,0,0,0.35);
+    }
+    .panel.board-panel h2 {
+      color: #fefce8;
+    }
+    .panel.board-panel p.hint {
+      color: #e5f2d0;
+    }
+
+    .panel.board-panel .btn-ghost {
+      border-color: rgba(226, 232, 240, 0.7);
+      background: rgba(255, 255, 255, 0.12);
+      color: #f9fafb;
+    }
+    .panel.board-panel .btn-ghost-danger {
+      border-color: rgba(252, 165, 165, 0.85);
+      background: rgba(248, 113, 113, 0.12);
+      color: #fee2e2;
+    }
+
+    /* ===== ボード（付箋エリア）は透明 ===== */
+    .board {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      overflow-x: auto;
+      padding: 10px 4px 4px;
+      border-radius: 14px;
+      background: transparent;
+      box-shadow: none;
+      border: none;
+    }
+
+    .column {
+      flex: 1;
+      min-width: 180px;
+      background: rgba(15, 23, 42, 0.02);
+      border-radius: 14px;
+      padding: 6px 6px 10px;
+      border: 1px dashed rgba(226, 232, 240, 0.25);
+      display: flex;
+      flex-direction: column;
+    }
+    .column-header {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #f9fbe7;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .column-count {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(248, 250, 252, 0.18);
+      color: #e2f3d2;
+    }
+    .column-body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 2px;
+      overflow-y: visible;
+    }
+
+    .note {
+      position: relative;
+      padding: 12px 12px 24px;
+      border-radius: 10px;
+      background: #fef9c3;
+      box-shadow:
+        0 6px 10px rgba(15, 23, 42, 0.3),
+        inset 0 0 0 1px rgba(148, 163, 184, 0.2);
+      font-size: 0.85rem;
+      transform: rotate(-1.5deg);
+      transform-origin: center;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+      cursor: default;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      color: #111111;          /* 付箋内の文字色を黒に */
+    }
+    .note:nth-child(2n) {
+      transform: rotate(1.3deg);
+      background: #bfdbfe;
+    }
+    .note:nth-child(3n) {
+      transform: rotate(-0.8deg);
+      background: #bbf7d0;
+    }
+    .note:hover {
+      transform: translateY(-2px) scale(1.01);
+      box-shadow:
+        0 10px 18px rgba(0, 0, 0, 0.4),
+        inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+    }
+    .note-author {
+      font-weight: 600;
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      color: #1e293b;
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    .note-category {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.12);
+      color: #020617;
+    }
+    .note-text {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .note-footer {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+      align-items: center;
+      font-size: 0.75rem;
+    }
+    .note-btn {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: rgba(255, 255, 255, 0.8);
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .note-btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .note-btn-like {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+    }
+    .note-btn-del {
+      border-color: #fecaca;
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    .note-id {
+      position: absolute;
+      bottom: 4px;
+      right: 6px;
+      font-size: 0.65rem;
+      opacity: 0.5;
+    }
+
+    .badge {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #1d296b;
+    }
+
+    /* QRモーダル */
+    #qrOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    #qrOverlay.active {
+      display: flex;
+    }
+    .qr-modal {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 16px 20px;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.45);
+      text-align: center;
+      max-width: 90vw;
+      width: min(90vw, 440px);   /* 初期サイズ。ここから自由にリサイズ可能 */
+      resize: both;              /* ★ マウスでリサイズ可能 */
+      overflow: auto;
+      cursor: default;
+    }
+    .qr-modal h2 {
+      margin: 0 0 4px;
+      font-size: 0.95rem;
+    }
+    .qr-modal p {
+      margin: 0 0 8px;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+    #qrContainer {
+      margin: 8px auto 12px;
+      width: 100%;               /* モーダルの幅に追従 */
+      max-width: 600px;          /* 必要なら上限。もっと大きくしたければ増やす */
+      aspect-ratio: 1 / 1;      /* 正方形を維持 */
+      display: flex;
+      align-items: center;
+      justify-content: center;   /* ★ 中央揃え */
+    }
+    #qrContainer canvas,
+    #qrContainer img {
+      width: 100%;               /* コンテナに合わせて拡大縮小 */
+      height: 100%;
+      display: block;
+    }
+    #qrClose {
+      font-size: 0.8rem;
+    }
+  </style>
+<style>
+  #site-credit {
+    position: fixed;
+    right: 12px;
+    bottom: 8px;
+    z-index: 1000;
+    font-size: 11px;
+    line-height: 1.2;
+    color: rgba(55, 65, 81, 0.72);
+    background: rgba(255, 255, 255, 0.82);
+    padding: 4px 7px;
+    border-radius: 6px;
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>
+    <button id="qrButton" class="qr-button" type="button" aria-label="QRコードを表示">
+      <span class="qr-icon"></span>
+    </button>
+    <span>AIふせんボード</span>
+  </h1>
+  <!-- ダミーフォーム: Enter で勝手に送信されないように -->
+  <form class="toolbar" onsubmit="return false;">
+    <div class="toolbar-group">
+      <label for="apiKey">Gemini APIキー</label>
+      <input id="apiKey" type="password" placeholder="AIza..." autocomplete="off" />
+    </div>
+    <div class="toolbar-group">
+      <label for="categories">カテゴリ一覧</label>
+      <input id="categories" type="text" value="質問, 感想, 改善案, その他" />
+    </div>
+    <button id="classifyBtn" class="btn-primary" type="button">
+      🔍 分類する
+    </button>
+  </form>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>✍ 新しいふせん</h2>
+    <p class="hint">
+      名前はニックネームでもOKです。送信すると右側に「ふせん」として追加されます。
+    </p>
+
+    <div class="field-row">
+      <div class="field-group">
+        <label for="nameInput">名前（任意）</label>
+        <input id="nameInput" type="text" placeholder="きいちゃん など" />
+      </div>
+      <div class="field-group">
+        <label for="tagInput">タグ（任意）</label>
+        <input id="tagInput" type="text" placeholder="#1班 など" />
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label for="commentInput">コメント</label>
+      <textarea id="commentInput" placeholder="ここに意見や感想、質問などを書いてください"></textarea>
+    </div>
+
+    <div class="field-row" style="align-items:center; margin-top:4px;">
+      <button id="addBtn" class="btn-ghost" type="button">➕ ふせんを送る。</button>
+      <div id="formStatus" class="status"></div>
+    </div>
+
+    <hr style="margin:10px 0; border:none; border-top:1px dashed #e2e8f0;" />
+
+    <p class="hint">
+      上の「分類する」ボタンを押すと、すべてのふせんを Gemini が
+      <span class="badge">カテゴリ分類</span>します。
+    </p>
+  </section>
+
+  <!-- 右側：黒板パネル -->
+  <section class="panel board-panel">
+    <h2>📌 みんなのふせんボード</h2>
+
+    <!-- 保存・削除・いいねリセットボタン -->
+    <div class="field-row" style="justify-content:flex-end; margin-bottom:4px;">
+      <button id="exportBtn" class="btn-ghost" type="button">💾 全てのふせんを保存</button>
+      <button id="resetLikesBtn" class="btn-ghost" type="button">💗 いいねをリセット</button>
+      <button id="clearBtn" class="btn-ghost-danger" type="button">🗑 全てのふせんを削除</button>
+    </div>
+
+    <p class="hint" id="boardHint">
+      まだふせんがありません。左から追加してください。
+    </p>
+    <!-- 黒板上に透明なボードとして配置 -->
+    <div id="board" class="board"></div>
+  </section>
+</main>
+
+<!-- QRコード表示用モーダル -->
+<div id="qrOverlay">
+  <div class="qr-modal">
+    <h2>AIふせんボード 参加用QRコード</h2>
+    <p>スマホやタブレットでこのQRコードを読み取ってください。</p>
+    <div id="qrContainer"></div>
+    <button id="qrClose" class="btn-ghost" type="button">閉じる</button>
+  </div>
+</div>
+
+<script>
+  // ==== QRコード表示 ====
+  const QR_URL = "https://scd-ku.github.io/aifusen/";
+  const qrButton = document.getElementById("qrButton");
+  const qrOverlay = document.getElementById("qrOverlay");
+  const qrClose = document.getElementById("qrClose");
+  const qrContainer = document.getElementById("qrContainer");
+  let qrInstance = null;
+
+  qrButton.addEventListener("click", () => {
+    if (!qrInstance) {
+      qrInstance = new QRCode(qrContainer, {
+        text: QR_URL,
+        width: 360,   // ベース解像度（CSSで拡大縮小）
+        height: 360
+      });
+    }
+    qrOverlay.classList.add("active");
+  });
+
+  qrClose.addEventListener("click", () => {
+    qrOverlay.classList.remove("active");
+  });
+
+  qrOverlay.addEventListener("click", (e) => {
+    if (e.target === qrOverlay) {
+      qrOverlay.classList.remove("active");
+    }
+  });
+
+  // ==== Firebase 設定 ====
+  const firebaseConfig = {
+    apiKey: "AIzaSyCPgjXJw9HQ2AUMzgN4O16s7UYjDllO87I",
+    authDomain: "aifusen-class.firebaseapp.com",
+    projectId: "aifusen-class",
+    storageBucket: "aifusen-class.appspot.com",
+    messagingSenderId: "414270455525",
+    appId: "1:414270455525:web:95444f14ee8306b6af1e0c",
+    measurementId: "G-H74HN1KZTY"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // ==== ふせんデータ管理 ====
+  const notes = [];
+
+  const nameInput = document.getElementById("nameInput");
+  const tagInput = document.getElementById("tagInput");
+  const commentInput = document.getElementById("commentInput");
+  const addBtn = document.getElementById("addBtn");
+  const formStatus = document.getElementById("formStatus");
+
+  const apiKeyInput = document.getElementById("apiKey");
+  const categoriesInput = document.getElementById("categories");
+  const classifyBtn = document.getElementById("classifyBtn");
+
+  const exportBtn = document.getElementById("exportBtn");
+  const resetLikesBtn = document.getElementById("resetLikesBtn");
+  const clearBtn = document.getElementById("clearBtn");
+
+  const boardEl = document.getElementById("board");
+  const boardHint = document.getElementById("boardHint");
+
+  let noteCounter = 1;
+  const GEMINI_MODEL = "gemini-2.5-flash";
+
+  // ==== Firestore の notes コレクションをリアルタイムで監視 ====
+  db.collection("notes").orderBy("createdAt")
+    .onSnapshot((snapshot) => {
+      notes.length = 0;
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        const createdAt =
+          d.createdAt && d.createdAt.toDate ? d.createdAt.toDate() : null;
+        notes.push({
+          id: d.id,
+          name: d.name,
+          tag: d.tag,
+          text: d.text,
+          category: d.category || "未分類",
+          createdAt,
+          likes: d.likes || 0
+        });
+      });
+
+      const maxNum = notes.reduce((max, n) => {
+        const num = parseInt(n.id.slice(1), 10);
+        return isNaN(num) ? max : Math.max(max, num);
+      }, 0);
+      noteCounter = maxNum + 1;
+
+      renderBoard();
+    });
+
+  // ==== ふせんを追加（Firestoreに保存） ====
+  addBtn.addEventListener("click", async () => {
+    const name = nameInput.value.trim() || " ";
+    const tag = tagInput.value.trim();
+    const text = commentInput.value.trim();
+
+    if (!text) {
+      formStatus.textContent = "コメントを入力してください。";
+      formStatus.classList.add("error");
+      return;
+    }
+
+    const id = `N${String(noteCounter).padStart(3, "0")}`;
+    noteCounter++;
+
+    try {
+      await db.collection("notes").doc(id).set({
+        id,
+        name,
+        tag,
+        text,
+        category: "未分類",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        likes: 0
+      });
+
+      commentInput.value = "";
+      formStatus.textContent = "ふせんを追加しました。";
+      formStatus.classList.remove("error");
+      setTimeout(() => (formStatus.textContent = ""), 1500);
+    } catch (e) {
+      console.error(e);
+      formStatus.textContent = "保存中にエラーが発生しました。";
+      formStatus.classList.add("error");
+    }
+  });
+
+  commentInput.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      addBtn.click();
+    }
+  });
+
+  // ==== CSVエスケープ ====
+  function csvEscape(value) {
+    const v = (value ?? "").toString().replace(/"/g, '""');
+    return `"${v}"`;
+  }
+
+  // ==== ふせんデータ保存（CSVダウンロード） ====
+  exportBtn.addEventListener("click", () => {
+    if (notes.length === 0) {
+      alert("保存するふせんがありません。");
+      return;
+    }
+
+    const header = ["id", "name", "tag", "text", "category", "createdAt", "likes"];
+    const lines = [header.join(",")];
+
+    notes.forEach((n) => {
+      const created =
+        n.createdAt instanceof Date
+          ? n.createdAt.toISOString()
+          : (n.createdAt || "");
+      const row = [
+        n.id,
+        n.name,
+        n.tag,
+        n.text,
+        n.category,
+        created,
+        n.likes ?? 0
+      ].map(csvEscape).join(",");
+      lines.push(row);
+    });
+
+    const csv = lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    const now = new Date();
+    const pad = (num) => String(num).padStart(2, "0");
+    const filename =
+      `aifusen_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_` +
+      `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.csv`;
+
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ==== いいね一括リセット ====
+  resetLikesBtn.addEventListener("click", async () => {
+    if (notes.length === 0) {
+      alert("リセットするいいねがありません。");
+      return;
+    }
+    const ok = confirm("すべてのふせんの『いいね』を 0 にリセットします。よろしいですか？");
+    if (!ok) return;
+
+    resetLikesBtn.disabled = true;
+    const originalText = resetLikesBtn.textContent;
+    resetLikesBtn.textContent = "リセット中...";
+
+    try {
+      const snapshot = await db.collection("notes").get();
+      const batch = db.batch();
+      snapshot.forEach((doc) => {
+        batch.update(doc.ref, { likes: 0 });
+      });
+      await batch.commit();
+      alert("すべての『いいね』をリセットしました。");
+    } catch (e) {
+      console.error(e);
+      alert("リセット中にエラーが発生しました。コンソールを確認してください。");
+    } finally {
+      resetLikesBtn.disabled = false;
+      resetLikesBtn.textContent = originalText;
+    }
+  });
+
+  // ==== ふせんデータ削除（全削除） ====
+  clearBtn.addEventListener("click", async () => {
+    if (notes.length === 0) {
+      alert("削除するふせんがありません。");
+      return;
+    }
+
+    const ok = confirm(
+      "すべてのふせんデータを削除します。よろしいですか？\n（この操作は元に戻せません）"
+    );
+    if (!ok) return;
+
+    clearBtn.disabled = true;
+    const originalText = clearBtn.textContent;
+    clearBtn.textContent = "削除中...";
+
+    try {
+      const snapshot = await db.collection("notes").get();
+      const batch = db.batch();
+      snapshot.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+      alert("すべてのふせんデータを削除しました。");
+    } catch (e) {
+      console.error(e);
+      alert("削除中にエラーが発生しました。コンソールを確認してください。");
+    } finally {
+      clearBtn.disabled = false;
+      clearBtn.textContent = originalText;
+    }
+  });
+
+  // ==== ボード描画 ====
+  function renderBoard() {
+    boardEl.innerHTML = "";
+    if (notes.length === 0) {
+      boardHint.textContent = "まだふせんがありません。左から新しいふせんを追加してください。";
+      return;
+    }
+    boardHint.textContent = "";
+
+    const categorySet = new Set();
+    notes.forEach(n => categorySet.add(n.category || "未分類"));
+    const categories = Array.from(categorySet);
+
+    categories.forEach(cat => {
+      const col = document.createElement("div");
+      col.className = "column";
+
+      const header = document.createElement("div");
+      header.className = "column-header";
+      const title = document.createElement("div");
+      title.textContent = cat;
+      const count = document.createElement("div");
+      count.className = "column-count";
+      count.textContent = `${notes.filter(n => n.category === cat).length} 件`;
+      header.appendChild(title);
+      header.appendChild(count);
+      col.appendChild(header);
+
+      const body = document.createElement("div");
+      body.className = "column-body";
+
+      notes
+        .filter(n => n.category === cat)
+        .forEach(n => {
+          const noteEl = document.createElement("div");
+          noteEl.className = "note";
+
+          const authorEl = document.createElement("div");
+          authorEl.className = "note-author";
+          const left = document.createElement("span");
+          left.textContent = n.name;
+          const right = document.createElement("span");
+          right.className = "note-category";
+          right.textContent = n.tag || cat;
+          authorEl.appendChild(left);
+          authorEl.appendChild(right);
+
+          const textEl = document.createElement("div");
+          textEl.className = "note-text";
+          textEl.textContent = n.text;
+
+          const footerEl = document.createElement("div");
+          footerEl.className = "note-footer";
+
+          const likeBtn = document.createElement("button");
+          likeBtn.type = "button";
+          likeBtn.className = "note-btn note-btn-like";
+          likeBtn.textContent = "💗 " + (n.likes ?? 0);
+
+          likeBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            likeBtn.disabled = true;
+            try {
+              await db.collection("notes")
+                .doc(n.id)
+                .update({ likes: firebase.firestore.FieldValue.increment(1) });
+            } catch (err) {
+              console.error(err);
+              alert("いいねの反映中にエラーが発生しました。");
+            } finally {
+              likeBtn.disabled = false;
+            }
+          });
+
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "note-btn note-btn-del";
+          delBtn.textContent = "🗑 削除";
+
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const ok = confirm(`このふせん（${n.id}）を削除しますか？`);
+            if (!ok) return;
+            try {
+              await db.collection("notes").doc(n.id).delete();
+            } catch (err) {
+              console.error(err);
+              alert("削除中にエラーが発生しました。");
+            }
+          });
+
+          footerEl.appendChild(likeBtn);
+          footerEl.appendChild(delBtn);
+
+          const idEl = document.createElement("div");
+          idEl.className = "note-id";
+          idEl.textContent = n.id;
+
+          noteEl.appendChild(authorEl);
+          noteEl.appendChild(textEl);
+          noteEl.appendChild(footerEl);
+          noteEl.appendChild(idEl);
+
+          body.appendChild(noteEl);
+        });
+
+      col.appendChild(body);
+      boardEl.appendChild(col);
+    });
+  }
+
+  // ==== Gemini に渡すテキストを作成（名前・タグ・コメントすべて含める） ====
+  function buildClassificationText(n) {
+    const parts = [];
+    if (n.name) parts.push(`名前: ${n.name}`);
+    if (n.tag) parts.push(`タグ: ${n.tag}`);
+    if (n.text) parts.push(`コメント: ${n.text}`);
+    if (parts.length === 0) {
+      parts.push(`ID:${n.id}`);
+    }
+    return parts.join(" / ");
+  }
+
+  // ==== Gemini で分類（JSONモード + ゆるいパース） ====
+  async function classifyNotes() {
+    if (notes.length === 0) {
+      alert("分類するふせんがありません。");
+      return;
+    }
+
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+      alert("Gemini APIキーを入力してください。");
+      return;
+    }
+
+    const categoryText = categoriesInput.value.trim();
+    if (!categoryText) {
+      alert("カテゴリ一覧を入力してください（例：質問, 感想, 改善案, その他）");
+      return;
+    }
+
+    const categories = categoryText.split(",").map(c => c.trim()).filter(Boolean);
+    if (categories.length === 0) {
+      alert("カテゴリが正しく指定されていません。");
+      return;
+    }
+
+    classifyBtn.disabled = true;
+    classifyBtn.textContent = "分類中...";
+
+    try {
+      // 名前・タグ・コメントをまとめた説明文を渡す
+      const payloadNotes = notes.map(n => ({
+        id: n.id,
+        text: buildClassificationText(n)
+      }));
+
+      const prompt =
+        "あなたは授業で集めたふせんコメントを分類するアシスタントです。\n" +
+        "各 comments[i].text には「名前」「タグ」「コメント」が日本語でまとめて1行に入っています。\n" +
+        "与えられた comments 配列の各要素に、日本語の 'category' フィールドを追加してください。\n" +
+        "category は次の中から必ず1つだけ選んでください：\n" +
+        categories.join(" / ") + "\n\n" +
+        "出力は JSON オブジェクトのみとし、余計な説明文やコードブロックマーカーは一切書かないでください。\n" +
+        "形式は次のようにしてください：\n" +
+        "{\"comments\":[{\"id\":\"N001\",\"text\":\"説明文\",\"category\":\"感想\"}, ...]}\n\n" +
+        "では、次の comments を分類してください：\n\n" +
+        JSON.stringify({ comments: payloadNotes }, null, 2);
+
+      const url =
+        "https://generativelanguage.googleapis.com/v1beta/models/" +
+        encodeURIComponent(GEMINI_MODEL) +
+        ":generateContent?key=" +
+        encodeURIComponent(apiKey);
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }]
+            }
+          ],
+          generationConfig: {
+            response_mime_type: "application/json"
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("Gemini API error:", text);
+        throw new Error("APIエラー: " + response.status);
+      }
+
+      const data = await response.json();
+      const candidate = data.candidates && data.candidates[0];
+      if (!candidate || !candidate.content || !candidate.content.parts) {
+        console.error("Unexpected Gemini response:", data);
+        throw new Error("Gemini から期待した応答が得られませんでした。");
+      }
+
+      let jsonText = candidate.content.parts
+        .map(p => p.text || "")
+        .join("")
+        .trim();
+
+      const firstBrace = jsonText.indexOf("{");
+      const lastBrace = jsonText.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (e) {
+        console.error("JSON parse error:", e, jsonText);
+        throw new Error("Gemini の出力を JSON として解釈できませんでした。");
+      }
+
+      const classifiedComments = parsed.comments || [];
+      const map = new Map();
+      classifiedComments.forEach(c => {
+        map.set(c.id, c.category);
+      });
+
+      notes.forEach(n => {
+        const cat = map.get(n.id);
+        if (cat) n.category = cat;
+      });
+
+      const batch = db.batch();
+      notes.forEach((n) => {
+        const ref = db.collection("notes").doc(n.id);
+        batch.update(ref, { category: n.category });
+      });
+      await batch.commit();
+
+      renderBoard();
+      alert("分類が完了しました。");
+    } catch (err) {
+      console.error(err);
+      alert("分類中にエラーが発生しました。コンソールを確認してください。");
+    } finally {
+      classifyBtn.disabled = false;
+      classifyBtn.textContent = "🔍 分類する";
+    }
+  }
+
+  classifyBtn.addEventListener("click", classifyNotes);
+</script>
+
+<div id="site-credit" aria-label="Copyright">Science Comunication Laboratory, Kagawa University</div>
+</body>
+</html>
